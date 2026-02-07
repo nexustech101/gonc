@@ -1,4 +1,4 @@
-// GoNC – A cross-platform netcat clone with native SSH tunneling.
+// GoNC - A cross-platform netcat clone with native SSH tunneling.
 package main
 
 import (

@@ -73,7 +73,7 @@ func BuildAuthMethods(cfg *SSHConfig) ([]ssh.AuthMethod, error) {
 		methods = defaultAuthMethods()
 	}
 
-	// 5. Keyboard-interactive – always appended as the last method
+	// 5. Keyboard-interactive - always appended as the last method
 	// when AllowKeyboardInteractive is set.  Public tunnel services
 	// like serveo.net and localhost.run advertise both "publickey" and
 	// "keyboard-interactive", but actually authenticate via the latter
@@ -163,6 +163,11 @@ func agentConn() (io.ReadWriteCloser, error) {
 }
 
 func passwordAuth() (ssh.AuthMethod, error) {
+	// Allow non-interactive password via env var (for CI / containers).
+	if p := os.Getenv("GONC_SSH_PASSWORD_VALUE"); p != "" {
+		return ssh.Password(p), nil
+	}
+
 	fmt.Fprint(os.Stderr, "SSH password: ")
 	pass, err := term.ReadPassword(int(os.Stdin.Fd()))
 	fmt.Fprintln(os.Stderr)

@@ -57,8 +57,9 @@ func Execute(ctx context.Context, args []string) error {
 	fs.IntVar(&cfg.KeepAliveInterval, "keep-alive", 30, "SSH keepalive interval in seconds (0 to disable)")
 	fs.BoolVar(&cfg.AutoReconnect, "auto-reconnect", false, "Auto-reconnect on tunnel drop")
 
-	// ── output ───────────────────────────────────────────────────
+	// ── output / diagnostics ─────────────────────────────────────
 	fs.CountVarP(&cfg.Verbose, "verbose", "v", "Increase verbosity (repeatable)")
+	fs.BoolVar(&cfg.DryRun, "dry-run", false, "Validate config and exit without executing")
 
 	var showVersion, showHelp bool
 	fs.BoolVar(&showVersion, "version", false, "Print version and exit")
@@ -66,7 +67,10 @@ func Execute(ctx context.Context, args []string) error {
 
 	fs.Usage = func() { printUsage(fs) }
 
-	// ── parse ────────────────────────────────────────────────────
+	// ── load environment variables (before flag parsing) ─────────
+	config.LoadFromEnv(cfg)
+
+	// ── parse CLI flags (overrides env vars) ─────────────────────
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -135,6 +139,11 @@ func Execute(ctx context.Context, args []string) error {
 	// ── validate ─────────────────────────────────────────────────
 	if err := cfg.Validate(); err != nil {
 		return err
+	}
+
+	if cfg.DryRun {
+		fmt.Fprintln(os.Stderr, "gonc: configuration valid (dry-run)")
+		return nil
 	}
 
 	// ── build components ─────────────────────────────────────────
@@ -206,29 +215,40 @@ func printUsage(fs *flag.FlagSet) {
 	fmt.Fprintf(os.Stderr, `GoNC - Network Connectivity Tool v%s
 
 A cross-platform netcat implementation with SSH tunneling.
+Single static binary. Zero configuration files required.
 
 Usage:
-  gonc [options] <host> <port> [ports...]     Connect
-  gonc -l -p <port> [options]                 Listen
-  gonc -z [options] <host> <ports...>         Scan
-  gonc -T user@gateway <host> <port>          SSH tunnel (forward)
-  gonc -p <port> -R user@gw --remote-port <port>     Reverse tunnel
+  gonc [options] <host> <port> [ports...]             Connect
+  gonc -l -p <port> [options]                         Listen
+  gonc -z [options] <host> <ports...>                 Scan
+  gonc -T user@gateway <host> <port>                  SSH tunnel (forward)
+  gonc -p <port> -R [user@]host --remote-port <port>  Reverse tunnel
 
 Options:
 `, version)
 	fs.PrintDefaults()
 	fmt.Fprintf(os.Stderr, `
+Environment Variables:
+  GONC_HOST, GONC_PORT, GONC_LISTEN, GONC_UDP, GONC_VERBOSE
+  GONC_TUNNEL, GONC_SSH_KEY, GONC_SSH_AGENT, GONC_STRICT_HOSTKEY
+  GONC_REVERSE_TUNNEL, GONC_REMOTE_PORT, GONC_AUTO_RECONNECT
+
+  Precedence: CLI flags > Environment > Defaults
+
 Examples:
   gonc example.com 80                         TCP connect
   gonc -l -p 8080                             Listen on 8080
   gonc -vz host.example.com 20-25 80 443      Port scan
-  gonc -T admin@bastion db-internal 5432      SSH tunnel
+  gonc -T admin@bastion db-internal 5432      SSH forward tunnel
   echo "hello" | gonc host.example.com 9000   Pipe data
 
   # Reverse tunnel - expose local port 8080 on gateway port 9000
   gonc -p 8080 -R user@gateway --remote-port 9000
 
-  # Expose local port 3000 via serveo.net (like ssh -R 80:localhost:3000 serveo.net)
+  # Expose local port 3000 via serveo.net (developer tunnel)
   gonc -p 3000 -R serveo.net --remote-port 80
+
+  # Validate configuration without executing
+  gonc --dry-run -p 3000 -R serveo.net --remote-port 80
 `)
 }

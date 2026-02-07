@@ -246,7 +246,7 @@ func TestNewReverseTunnelDefaults(t *testing.T) {
 		SSHConfig:  &SSHConfig{Host: "gw", Port: 22, User: "u"},
 		RemotePort: 9000,
 		LocalPort:  8080,
-	}, util.NewLogger(0))
+	}, util.NewLogger(0), nil)
 
 	if rt.config.RemoteBindAddress != "" {
 		t.Errorf("RemoteBindAddress = %q, want %q",
@@ -265,7 +265,7 @@ func TestNewReverseTunnelPreservesExplicit(t *testing.T) {
 		RemotePort:        3306,
 		LocalAddress:      "192.168.1.100",
 		LocalPort:         3306,
-	}, util.NewLogger(0))
+	}, util.NewLogger(0), nil)
 
 	if rt.config.RemoteBindAddress != "10.0.1.5" {
 		t.Errorf("RemoteBindAddress = %q, want %q",
@@ -284,7 +284,7 @@ func TestReverseTunnelCloseIdempotent(t *testing.T) {
 		SSHConfig:  &SSHConfig{Host: "gw", Port: 22, User: "u"},
 		RemotePort: 9000,
 		LocalPort:  8080,
-	}, util.NewLogger(0))
+	}, util.NewLogger(0), nil)
 
 	// Close without Start should be safe.
 	if err := rt.Close(); err != nil {

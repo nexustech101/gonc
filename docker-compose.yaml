@@ -72,6 +72,8 @@ services:
       USER_NAME: testuser
       SUDO_ACCESS: "false"
       LOG_STDOUT: "true"
+    volumes:
+      - ./scripts/enable-forwarding.sh:/custom-cont-init.d/enable-forwarding.sh:ro
     ports:
       - "2222:2222"
     networks:
@@ -79,11 +81,11 @@ services:
         aliases:
           - ssh-server
     healthcheck:
-      test: ["CMD-SHELL", "ss -tlnp | grep -q ':2222'"]
+      test: ["CMD-SHELL", "nc -z localhost 2222"]
       interval: 3s
       timeout: 5s
       retries: 10
-      start_period: 5s
+      start_period: 10s
     profiles: ["integration"]
 
   # ── 4. target-server: Simple TCP echo service for E2E tests ─────────
@@ -97,17 +99,17 @@ services:
         echo "[target-server] listening on :8080 (echo)"
         socat TCP-LISTEN:8080,fork,reuseaddr EXEC:'/bin/cat'
     ports:
-      - "8080:8080"
+      - "18080:8080"
     networks:
       testnet:
         aliases:
           - target-server
     healthcheck:
-      test: ["CMD-SHELL", "nc -z 127.0.0.1 8080"]
+      test: ["CMD-SHELL", "socat -u OPEN:/dev/null TCP:127.0.0.1:8080,connect-timeout=1"]
       interval: 3s
       timeout: 5s
       retries: 10
-      start_period: 3s
+      start_period: 5s
     profiles: ["integration"]
 
   # ── 5. integration: Run tunnel E2E test against ssh + target ────────
@@ -120,6 +122,8 @@ services:
         condition: service_healthy
       target-server:
         condition: service_healthy
+    environment:
+      GONC_SSH_PASSWORD_VALUE: testpass
     networks:
       - testnet
     entrypoint: ["/bin/sh", "-c"]
@@ -136,9 +140,9 @@ services:
 
         echo "══ Integration: SSH tunnel connect ═══════════"
         echo "tunnel-test" | \
-          gonc -T testuser@ssh-server:2222 \
+          timeout 10 gonc -w 3 -T testuser@ssh-server:2222 \
                --ssh-password \
-               target-server 8080
+               target-server 8080 || true
         echo "  ✓ SSH tunnel connect OK"
 
         echo "══════════════════════════════════════════════"

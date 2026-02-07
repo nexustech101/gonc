@@ -13,27 +13,41 @@
 ```
 main.go
   ↓
-cmd/root.go          Parse flags → build Config → build Tunnel → build NetCat → Run
+cmd/root.go          Parse flags → load env → build Config → build Tunnel → Run
   ↓                                    ↓                  ↓
-config/config.go     Immutable config struct + validation
+config/
+  ├─ config.go       Config struct + validation (returns *ConfigError)
+  ├─ defaults.go     Centralised default constants
+  └─ loader.go       GONC_* environment variable loader
   ↓
 netcat/netcat.go     Orchestrator: dispatches to client / server / scanner / reverse
   ├─ client.go       TCP & UDP connect mode
   ├─ server.go       TCP & UDP listen mode (with keep-open)
   ├─ transfer.go     Exec / command binding via os/exec
   ├─ scanner.go      Concurrent port scanning
-  └─ reverse.go      Reverse tunnel dispatch → tunnel/reverse.go
+  └─ reverse.go      Reverse tunnel dispatch → tunnel/reverse_tunnel.go
   ↓
 tunnel/tunnel.go     Interface definition
-  ├─ ssh.go          SSH forward tunnel (x/crypto/ssh) + SSHConfig
-  ├─ auth.go         Auth methods (keys, agent, keyboard-interactive)
-  ├─ reverse.go      Reverse SSH tunnel engine + custom channel handler
-  └─ manager.go      Health monitoring goroutine
+  ├─ ssh.go              SSH forward tunnel (x/crypto/ssh) + structured errors
+  ├─ auth.go             Auth methods (keys, agent, keyboard-interactive)
+  ├─ reverse_tunnel.go   Core lifecycle: Start / Wait / Close / acceptLoop
+  ├─ reverse_listener.go Custom forwarded-tcpip SSH listener
+  ├─ reverse_forwarder.go Connection bridging with byte metrics
+  ├─ reverse_health.go   Keepalive, reconnection, sleepCtx
+  ├─ reverse_dial.go     SSH dial, gateway-ports validation, message drain
+  └─ manager.go          Health monitoring goroutine
+  ↓
+internal/
+  ├─ errors/errors.go    NetworkError, SSHError, ConfigError, sentinels
+  ├─ retry/backoff.go    Exponential backoff with jitter
+  ├─ retry/circuit_breaker.go  Closed → Open → Half-Open state machine
+  └─ metrics/metrics.go  Lock-free atomic counters, Snapshot, JSON export
   ↓
 util/
   ├─ io.go           BidirectionalCopy (goroutine-safe, context-aware)
   ├─ network.go      Address formatting, DNS, free-port finder
-  └─ logger.go       Levelled stderr logger
+  ├─ logger.go       Levelled stderr logger with timestamps + prefixes
+  └─ pool.go         sync.Pool byte buffer reuse
 ```
 
 ## Data Flow
@@ -135,9 +149,14 @@ Explicit flags?
 ## Error Strategy
 
 * Every public function returns `error`.
-* Errors are wrapped with `fmt.Errorf("context: %w", err)` for stack traces.
+* Domain errors use structured types from `internal/errors`:
+  - `NetworkError` — carries Op, Addr, Retryable flag.
+  - `SSHError` — carries Op, Host, Port for SSH-specific failures.
+  - `ConfigError` — carries Field, Value, Message, Hint for user guidance.
+* Sentinel errors (`ErrTunnelClosed`, `ErrNotConnected`, …) enable
+  `errors.Is()` checks without string matching.
+* `IsRetryable(err)` classifies errors for the retry/backoff system.
 * `bail()` never happens – the top-level `main` prints and exits.
-* Tunnel / network errors include the remote address for actionable diagnostics.
 
 ## Buffer Sizing
 
