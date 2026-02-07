@@ -397,25 +397,37 @@ gonc/
 ├── Makefile                        Build, test, bench, coverage, check
 │
 ├── cmd/
-│   ├── root.go                     CLI flag parsing & dispatch
+│   ├── root.go                     CLI flags → Config → core.Build() → Run
 │   └── root_test.go                CLI integration tests
 │
 ├── config/
 │   ├── config.go                   Config struct & validation
 │   ├── config_test.go              Validation tests
 │   ├── defaults.go                 Centralized default constants
-│   ├── loader.go                   Environment variable loader
-│   ├── loader_test.go              Loader tests
-│   └── validator_test.go           Edge-case validation tests
+│   └── loader.go                   Environment variable loader
 │
-├── netcat/
-│   ├── netcat.go                   Run dispatcher
-│   ├── client.go / client_test.go  TCP/UDP client mode
-│   ├── server.go / server_test.go  Listen mode
-│   ├── scanner.go / scanner_test.go Port scanning (-z)
-│   ├── reverse.go                  Reverse tunnel dispatch
-│   ├── transfer.go                 Exec / command binding
-│   └── bench_test.go               Benchmarks
+├── internal/
+│   ├── core/                       Orchestration layer
+│   │   ├── mode.go                 Mode interface
+│   │   ├── builder.go              Build(cfg) → Mode (single dispatch point)
+│   │   ├── connect.go              ConnectMode: Dialer + Capability
+│   │   ├── listen.go               ListenMode: accept → Capability per conn
+│   │   ├── scan.go                 ScanMode: concurrent port probing
+│   │   └── reverse.go              ReverseTunnelMode
+│   ├── transport/                  How data moves
+│   │   ├── transport.go            Dialer interface
+│   │   ├── tcp.go                  TCPDialer (plain TCP)
+│   │   ├── udp.go                  UDPDialer (plain UDP)
+│   │   └── ssh.go                  SSHDialer (lazy SSH tunnel wrapper)
+│   ├── capability/                 What happens over a connection
+│   │   ├── capability.go           Capability interface
+│   │   ├── relay.go                Relay: stdin/stdout ↔ connection
+│   │   └── exec.go                 Exec: wire conn to child process
+│   ├── session/                    Connection lifecycle
+│   │   └── session.go              Session: Conn + I/O + Logger
+│   ├── errors/                     Domain error types
+│   ├── retry/                      Exponential backoff + circuit breaker
+│   └── metrics/                    Lock-free atomic counters
 │
 ├── tunnel/
 │   ├── tunnel.go                   Tunnel interface
@@ -426,21 +438,13 @@ gonc/
 │   ├── reverse_health.go           Keepalive & reconnection
 │   ├── reverse_dial.go             SSH dial + GatewayPorts validation
 │   ├── reverse_listener.go         Custom forwarded-tcpip handler
-│   ├── reverse_test.go             Reverse tunnel tests
-│   ├── manager.go                  Lifecycle management
-│   └── bench_test.go               Benchmarks
-│
-├── internal/
-│   ├── errors/                     Domain error types (NetworkError, SSHError, ConfigError)
-│   ├── retry/                      Exponential backoff + circuit breaker
-│   └── metrics/                    Lock-free atomic counters
+│   └── manager.go                  Lifecycle management
 │
 ├── util/
 │   ├── io.go / io_test.go          Bidirectional copy
 │   ├── network.go / network_test.go Address helpers
-│   ├── logger.go / logger_test.go  Levelled logger with timestamps
-│   ├── pool.go                     sync.Pool buffer reuse
-│   └── bench_test.go               Benchmarks
+│   ├── logger.go                   Levelled logger with timestamps
+│   └── pool.go                     sync.Pool buffer reuse
 │
 ├── docs/
 │   ├── REFACTORING.md              Refactoring changelog
