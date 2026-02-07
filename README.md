@@ -141,24 +141,51 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for design details.
 
 ```
 gonc/
-├── main.go              Entry point
-├── cmd/root.go          CLI flag parsing
-├── config/config.go     Configuration & validation
+├── main.go                    Entry point
+├── go.mod / go.sum            Module dependencies
+├── Makefile                   Build, test, lint, clean targets
+├── .golangci.yml              Linter configuration
+├── cmd/
+│   └── root.go                CLI flag parsing (pflag / cobra-style)
+├── config/
+│   ├── config.go              Configuration & validation
+│   └── config_test.go
 ├── netcat/
-│   ├── netcat.go        Run dispatcher
-│   ├── client.go        TCP/UDP client mode
-│   ├── server.go        Listen mode
-│   ├── transfer.go      Exec / command binding
-│   └── scanner.go       Port scanning (-z)
+│   ├── netcat.go              Run dispatcher
+│   ├── client.go              TCP/UDP client mode
+│   ├── client_test.go
+│   ├── server.go              Listen mode
+│   ├── server_test.go
+│   ├── transfer.go            Exec / command binding
+│   ├── scanner.go             Port scanning (-z)
+│   └── scanner_test.go
 ├── tunnel/
-│   ├── tunnel.go        Tunnel interface
-│   ├── ssh.go           SSH implementation
-│   ├── auth.go          Auth method builders
-│   └── manager.go       Lifecycle / health
-└── util/
-    ├── io.go            Bidirectional copy
-    ├── network.go       Address helpers
-    └── logger.go        Levelled logging
+│   ├── tunnel.go              Tunnel interface
+│   ├── ssh.go                 SSH implementation
+│   ├── auth.go                Auth method builders
+│   ├── auth_test.go
+│   └── manager.go             Lifecycle / health
+├── util/
+│   ├── io.go                  Bidirectional copy
+│   ├── io_test.go
+│   ├── network.go             Address helpers
+│   ├── network_test.go
+│   └── logger.go              Levelled logging
+├── resource/
+│   └── resource.json          Windows PE version metadata
+├── scripts/
+│   ├── build-all.sh           Cross-compile helper
+│   └── integration-test.sh    Docker E2E test runner
+├── Dockerfile                 Multi-stage (deps → test → builder → final → dist)
+├── docker-compose.yaml        Dev/test orchestration (build, test, integration)
+├── docker-compose.prod.yaml   Hardened production deployment
+├── .dockerignore
+├── README-DOCKER.md           Docker usage guide
+├── ARCHITECTURE.md            Design documentation
+├── EXAMPLES.md                Extended usage examples
+└── .github/
+    └── workflows/
+        └── build.yml          CI/CD pipeline
 ```
 
 ## License
