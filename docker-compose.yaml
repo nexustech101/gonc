@@ -1,0 +1,170 @@
+# ═══════════════════════════════════════════════════════════════════════
+#  GoNC - Development & Testing docker-compose
+# ═══════════════════════════════════════════════════════════════════════
+#
+#  Quick reference:
+#    docker compose up test           - run unit tests
+#    docker compose up build          - cross-compile all binaries
+#    docker compose up integration    - full tunnel integration test
+#    docker compose run gonc <args>   - run gonc in a container
+#
+# ═══════════════════════════════════════════════════════════════════════
+
+name: gonc
+
+x-common-build: &common-build
+  context: .
+  dockerfile: Dockerfile
+
+services:
+  # ── 1. build: Cross-compile for all platforms ───────────────────────
+  build:
+    build:
+      <<: *common-build
+      target: builder
+    volumes:
+      - ./dist:/export
+    # Copy binaries out of the builder layer to the host ./dist/ dir.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        mkdir -p /export
+        cp /out/* /export/
+        echo "───────────────────────────────────────────"
+        echo " Build complete - binaries in ./dist/"
+        echo "───────────────────────────────────────────"
+        ls -lh /export/
+    profiles: ["build"]
+
+  # ── 2. test: Unit tests with race detector + coverage ───────────────
+  test:
+    build:
+      <<: *common-build
+      target: test
+    # The test stage already runs tests during `docker build`.
+    # This service lets you re-run them at will with source-mount.
+    volumes:
+      - .:/src
+    working_dir: /src
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "══ go vet ════════════════════════════════════"
+        go vet ./...
+        echo "══ go test (race + coverage) ════════════════"
+        go test -race -count=1 -timeout 120s \
+          -coverprofile=/tmp/coverage.out ./...
+        echo "══ coverage summary ═════════════════════════"
+        go tool cover -func=/tmp/coverage.out | tail -1
+    profiles: ["test"]
+
+  # ── 3. ssh-server: OpenSSH daemon for tunnel integration tests ──────
+  ssh-server:
+    image: lscr.io/linuxserver/openssh-server:latest
+    hostname: ssh-server
+    environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: Etc/UTC
+      # Allow password auth for test convenience
+      PASSWORD_ACCESS: "true"
+      USER_PASSWORD: testpass
+      USER_NAME: testuser
+      SUDO_ACCESS: "false"
+      LOG_STDOUT: "true"
+    ports:
+      - "2222:2222"
+    networks:
+      testnet:
+        aliases:
+          - ssh-server
+    healthcheck:
+      test: ["CMD-SHELL", "ss -tlnp | grep -q ':2222'"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    profiles: ["integration"]
+
+  # ── 4. target-server: Simple TCP echo service for E2E tests ─────────
+  target-server:
+    image: alpine:3.20
+    hostname: target-server
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        apk add --no-cache socat >/dev/null 2>&1
+        echo "[target-server] listening on :8080 (echo)"
+        socat TCP-LISTEN:8080,fork,reuseaddr EXEC:'/bin/cat'
+    ports:
+      - "8080:8080"
+    networks:
+      testnet:
+        aliases:
+          - target-server
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 8080"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+      start_period: 3s
+    profiles: ["integration"]
+
+  # ── 5. integration: Run tunnel E2E test against ssh + target ────────
+  integration:
+    build:
+      <<: *common-build
+      target: final
+    depends_on:
+      ssh-server:
+        condition: service_healthy
+      target-server:
+        condition: service_healthy
+    networks:
+      - testnet
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        echo "══ Integration: direct connect ═══════════════"
+        echo "ping" | gonc -w 3 target-server 8080
+        echo "  ✓ direct TCP connect OK"
+
+        echo "══ Integration: port scan ════════════════════"
+        gonc -vz -w 3 target-server 8080
+        echo "  ✓ port scan OK"
+
+        echo "══ Integration: SSH tunnel connect ═══════════"
+        echo "tunnel-test" | \
+          gonc -T testuser@ssh-server:2222 \
+               --ssh-password \
+               target-server 8080
+        echo "  ✓ SSH tunnel connect OK"
+
+        echo "══════════════════════════════════════════════"
+        echo " All integration tests passed"
+        echo "══════════════════════════════════════════════"
+    profiles: ["integration"]
+
+  # ── 6. gonc: Final runtime container ────────────────────────────────
+  gonc:
+    build:
+      <<: *common-build
+      target: final
+    networks:
+      - testnet
+    # Override entrypoint args via:
+    #   docker compose run gonc -vz target-server 8080
+    profiles: ["run"]
+
+# ── Networks ──────────────────────────────────────────────────────────
+networks:
+  testnet:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
+
+# ── Volumes ───────────────────────────────────────────────────────────
+volumes:
+  dist:

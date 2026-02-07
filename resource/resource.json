@@ -1,0 +1,38 @@
+{
+  "FixedFileInfo": {
+    "FileVersion": {
+      "Major": 1,
+      "Minor": 0,
+      "Patch": 0,
+      "Build": 0
+    },
+    "ProductVersion": {
+      "Major": 1,
+      "Minor": 0,
+      "Patch": 0,
+      "Build": 0
+    },
+    "FileFlagsMask": "3f",
+    "FileFlags": "",
+    "FileOS": "040004",
+    "FileType": "01",
+    "FileSubType": "00"
+  },
+  "StringFileInfo": {
+    "Comments": "Cross-platform network connectivity tool with SSH tunneling",
+    "CompanyName": "Open Source Community",
+    "FileDescription": "GoNC - Network Connectivity Tool",
+    "FileVersion": "1.0.0.0",
+    "InternalName": "gonc",
+    "LegalCopyright": "MIT License",
+    "OriginalFilename": "gonc.exe",
+    "ProductName": "GoNC Network Utility",
+    "ProductVersion": "1.0.0.0"
+  },
+  "VarFileInfo": {
+    "Translation": {
+      "LangID": "0409",
+      "CharsetID": "04B0"
+    }
+  }
+}

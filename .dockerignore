@@ -1,0 +1,44 @@
+# Build artifacts
+build/
+dist/
+*.exe
+*.syso
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Docker (prevent recursive context)
+Dockerfile*
+docker-compose*.yaml
+.dockerignore
+
+# Documentation (not needed in image)
+*.md
+LICENSE
+license.txt
+
+# CI
+.github/
+
+# Lint config
+.golangci.yml
+
+# Test artifacts
+coverage.out
+coverage.html
+*.test
+
+# Resource metadata (Windows only)
+resource/

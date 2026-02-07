@@ -1,0 +1,33 @@
+run:
+  timeout: 3m
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - unused
+    - gosimple
+    - ineffassign
+    - typecheck
+    - misspell
+    - gofmt
+    - goimports
+    - gocritic
+
+linters-settings:
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - style
+      - performance
+
+issues:
+  exclude-rules:
+    # Allow InsecureIgnoreHostKey in tunnel code – it is user-opt-in.
+    - path: tunnel/
+      linters: [gosec]
+      text: "G106"
+    # Test helpers can ignore errors.
+    - path: _test\.go
+      linters: [errcheck]
