@@ -1,16 +1,35 @@
-# GoNC – Network Connectivity Tool
+# 🌐 GoNC — Cross-Platform Netcat with SSH Tunneling
 
+![Go](https://img.shields.io/badge/go-1.22+-00ADD8.svg?logo=go&logoColor=white)
+![SSH](https://img.shields.io/badge/ssh-tunneling-black.svg?logo=openssh&logoColor=white)
+![Docker](https://img.shields.io/badge/docker-compose-2496ED.svg?logo=docker&logoColor=white)
+![Platforms](https://img.shields.io/badge/platforms-linux%20%7C%20macOS%20%7C%20windows-lightgrey.svg)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
+![Release](https://img.shields.io/badge/release-v1.2.0-blue.svg)
 
-
-A cross-platform **netcat** clone written in Go with native **SSH tunneling** support.
-
-GoNC provides all standard netcat functionality – TCP/UDP client and server,
-port scanning, command execution – plus the ability to route any connection
-through an encrypted SSH tunnel without external tools.
+A production-ready **netcat** reimplementation in Go with first-class **SSH tunnel** support. GoNC provides all classic netcat functionality — TCP/UDP client & server, port scanning, command execution — plus the ability to route any connection through an encrypted SSH tunnel or expose local services to the internet via reverse tunneling. Single static binary, zero configuration files, cross-platform.
 
 ---
 
-## Quick Start
+## 📑 Table of Contents
+
+- [Quick Start](#-quick-start)
+- [Installation](#-installation)
+- [Features](#-features)
+- [SSH Forward Tunnel](#-ssh-forward-tunnel)
+- [Reverse SSH Tunnel](#-reverse-ssh-tunnel--expose-local-services)
+- [Developer Tunnels (Expose Localhost)](#-developer-tunnels--expose-localhost-to-the-internet)
+- [Environment Variables](#-environment-variables)
+- [Docker](#-docker)
+- [Build](#-build)
+- [Architecture](#-architecture)
+- [Project Layout](#-project-layout)
+- [Security](#-security)
+- [License](#-license)
+
+---
+
+## 🚀 Quick Start
 
 ```bash
 # Connect to a remote port
@@ -19,27 +38,32 @@ gonc example.com 80
 # Listen for inbound connections
 gonc -l -p 8080
 
-# Scan ports
+# Scan a range of ports
 gonc -vz host.example.com 20-25 80 443
 
 # Connect through an SSH tunnel
 gonc -T admin@bastion.example.com internal-db 5432
+
+# Expose local port 3000 on the internet (via serveo.net)
+gonc -p 3000 -R serveo.net --remote-port 80
 ```
 
-## Installation
+---
+
+## 📦 Installation
 
 ### From Source
 
 ```bash
-git clone <repo-url> && cd gonc
+git clone https://github.com/nexustech101/gonc.git && cd gonc
 go build -o gonc .            # Linux / macOS
 go build -o gonc.exe .        # Windows
 ```
 
-### Cross-compile
+### Cross-Compile All Platforms
 
 ```bash
-make build-all   # produces Linux, macOS, and Windows binaries
+make build-all   # linux/amd64, linux/arm64, darwin/amd64, darwin/arm64, windows/amd64
 ```
 
 ### Using `go install`
@@ -48,83 +72,105 @@ make build-all   # produces Linux, macOS, and Windows binaries
 go install gonc@latest
 ```
 
-## Features
+### Docker
+
+```bash
+docker compose --profile run build
+docker compose run gonc example.com 80
+```
+
+---
+
+## ✨ Features
 
 | Feature | Flag | Description |
-|---------|------|-------------|
-| TCP connect | `gonc host port` | Standard client mode |
-| TCP listen | `-l -p PORT` | Accept inbound connections |
-| UDP mode | `-u` | Datagram transport |
-| Port scan | `-z` | Zero-I/O scan |
-| Keep open | `-k` | Accept multiple connections |
-| Timeout | `-w SECS` | Connection / idle timeout |
-| Exec | `-e PROG` | Bind a program to the socket |
-| Shell cmd | `-c CMD` | Bind a shell command |
-| SSH tunnel | `-T user@host` | Route through SSH gateway |
-| Reverse tunnel | `-R host` | Expose local service on remote gateway |
-| Remote port | `--remote-port PORT` | Port to bind on remote gateway (for -R) |
-| Remote bind | `--remote-bind-address` | Remote bind address (default: server decides) |
-| GatewayPorts check | `--gateway-ports-check` | Validate GatewayPorts before tunneling |
-| Keep-alive | `--keep-alive SECS` | SSH keepalive interval (default 30) |
-| Auto-reconnect | `--auto-reconnect` | Reconnect on tunnel drop |
-| SSH key | `--ssh-key PATH` | Private key authentication |
-| SSH password | `--ssh-password` | Interactive password prompt |
-| SSH agent | `--ssh-agent` | Use running SSH agent |
-| Host keys | `--strict-hostkey` | Verify server fingerprints |
-| Verbose | `-v` / `-vv` | Increase output detail |
-| No DNS | `-n` | Numeric-only, skip DNS |
+|:--------|:-----|:------------|
+| **TCP connect** | `gonc host port` | Standard client mode |
+| **TCP listen** | `-l -p PORT` | Accept inbound connections |
+| **UDP mode** | `-u` | Datagram transport |
+| **Port scan** | `-z` | Zero-I/O scan with concurrency |
+| **Keep open** | `-k` | Accept multiple connections |
+| **Timeout** | `-w SECS` | Connection / idle timeout |
+| **Exec** | `-e PROG` | Bind a program to the socket |
+| **Shell cmd** | `-c CMD` | Bind a shell command |
+| **Verbose** | `-v` / `-vv` | Increase output detail |
+| **No DNS** | `-n` | Numeric-only, skip DNS resolution |
+| **Dry run** | `--dry-run` | Validate config without executing |
 
-## SSH Tunnel Usage
+### 🔐 SSH Tunnel Features
 
-GoNC can wrap any TCP connection in an SSH tunnel, allowing you to reach
-hosts that are only accessible from a bastion / jump server:
+| Feature | Flag | Description |
+|:--------|:-----|:------------|
+| **Forward tunnel** | `-T user@host` | Route through SSH gateway |
+| **Reverse tunnel** | `-R host` | Expose local service on remote gateway |
+| **Remote port** | `--remote-port PORT` | Port to bind on remote side |
+| **Remote bind** | `--remote-bind-address` | Remote bind address |
+| **GatewayPorts check** | `--gateway-ports-check` | Validate server config before tunneling |
+| **Keep-alive** | `--keep-alive SECS` | SSH keepalive interval (default 30) |
+| **Auto-reconnect** | `--auto-reconnect` | Reconnect on tunnel drop |
+| **SSH key** | `--ssh-key PATH` | Private key authentication |
+| **SSH password** | `--ssh-password` | Interactive password prompt |
+| **SSH agent** | `--ssh-agent` | Use running SSH agent |
+| **Host key verify** | `--strict-hostkey` | Verify server fingerprints |
+
+---
+
+## 🔒 SSH Forward Tunnel
+
+Route any TCP connection through an encrypted SSH tunnel to reach hosts behind a bastion / jump server:
 
 ```
-local machine ──SSH──▶ gateway ──TCP──▶ destination:port
+┌──────────┐        SSH        ┌──────────┐        TCP        ┌─────────────┐
+│  Local    │ ═══════════════▶ │ Gateway  │ ──────────────── ▶│ Destination │
+│  Machine  │   (encrypted)    │ (bastion)│                   │  host:port  │
+└──────────┘                   └──────────┘                   └─────────────┘
 ```
 
 ### Examples
 
 ```bash
-# Basic tunnel
+# Basic tunnel through bastion
 gonc -T user@bastion.example.com internal-service 8080
 
-# With explicit key
+# With explicit SSH key
 gonc -T deploy@gateway --ssh-key ~/.ssh/deploy_key db-server 5432
 
 # Password authentication
 gonc -T admin@jump-host --ssh-password target 22
 
-# Scan through tunnel
+# Port scan through tunnel
 gonc -vz -T user@bastion 10.0.0.5 22 80 443 3306
 
 # Pipe data through tunnel
 echo "SELECT 1" | gonc -T dba@bastion mysql-internal 3306
 ```
 
-### Authentication Order
+### 🔑 Authentication Order
 
-When no explicit auth flags are given, GoNC tries:
+When no explicit auth flags are given, GoNC tries in order:
 
-1. SSH agent (via `SSH_AUTH_SOCK` on Unix, or the OpenSSH named pipe on Windows)
-2. `~/.ssh/id_ed25519`
-3. `~/.ssh/id_rsa`
-4. `~/.ssh/id_ecdsa`
-5. Keyboard-interactive (auto-enabled for reverse tunnels — needed by
-   serveo.net and localhost.run)
+| Priority | Method | Details |
+|:--------:|:-------|:--------|
+| 1 | **SSH Agent** | `SSH_AUTH_SOCK` (Unix) or OpenSSH named pipe (Windows) |
+| 2 | **Ed25519 key** | `~/.ssh/id_ed25519` |
+| 3 | **RSA key** | `~/.ssh/id_rsa` |
+| 4 | **ECDSA key** | `~/.ssh/id_ecdsa` |
+| 5 | **Keyboard-interactive** | Auto-enabled for reverse tunnels (serveo.net, localhost.run) |
 
-## Reverse SSH Tunnel (Expose Local Service)
+---
 
-GoNC can expose a local TCP service on a remote SSH gateway using reverse
-tunneling, equivalent to `ssh -R`.  Remote clients connecting to the
-gateway are transparently forwarded back to your local machine:
+## 🔄 Reverse SSH Tunnel — Expose Local Services
+
+Expose a local TCP service on a remote SSH gateway, equivalent to `ssh -R`. Remote clients connecting to the gateway are transparently forwarded back to your local machine:
 
 ```
-Remote Client ──▶ SSH Gateway (port 9000) ──SSH──▶ GoNC ──TCP──▶ Local Service (port 8080)
+┌──────────────┐              ┌──────────────┐    SSH tunnel    ┌──────────┐        TCP        ┌───────────────┐
+│ Remote Client│ ──────────▶  │ SSH Gateway  │ ═══════════════▶ │  GoNC    │ ──────────────── ▶│ Local Service │
+│              │              │  (port 9000) │   (encrypted)    │          │                   │  (port 8080)  │
+└──────────────┘              └──────────────┘                  └──────────┘                   └───────────────┘
 ```
 
-The `-R` flag **implies listen mode** (`-l`), so you only need to specify
-your local port with `-p` and the remote port with `--remote-port`.
+> **Note:** The `-R` flag implies listen mode (`-l`), so you only need `-p` for the local port and `--remote-port` for the remote side.
 
 ### Examples
 
@@ -147,38 +193,37 @@ gonc -p 8080 -R user@gateway --remote-port 9000 --keep-alive 15
 
 ### Requirements
 
-- The remote SSH server must have `GatewayPorts yes` or `GatewayPorts clientspecified` in `sshd_config` for external access (not needed for public tunnel services).
-- Binding ports below 1024 on the remote requires root privileges.
-- Use `--gateway-ports-check` to validate before establishing the tunnel.
+| Requirement | Details |
+|:------------|:--------|
+| **GatewayPorts** | SSH server must have `GatewayPorts yes` or `clientspecified` in `sshd_config` for external access |
+| **Privileged ports** | Binding ports < 1024 on remote requires root |
+| **Validation** | Use `--gateway-ports-check` to verify before tunneling |
 
 ### Use Cases
 
-- **Expose local dev server** to a remote team
-- **Webhook testing** with external services (GitHub, Stripe, etc.)
-- **Bypass NAT/firewall** for incoming connections
-- **Share localhost** securely through services like serveo.net
+- 🌍 **Expose local dev server** to a remote team
+- 🔗 **Webhook testing** with external services (GitHub, Stripe, etc.)
+- 🛡️ **Bypass NAT/firewall** for incoming connections
+- 🤝 **Share localhost** securely through tunnel services
 
 ---
 
-## Exposing Localhost to the Internet (Developer Tunnels)
+## 🌍 Developer Tunnels — Expose Localhost to the Internet
 
-One of the most useful features of GoNC's reverse tunnel is the ability to
-expose a local development server to the public internet using free SSH
-tunnel services.  This is ideal for:
+One of GoNC's most powerful features is the ability to expose a local dev server to the public internet using free SSH tunnel services. Perfect for:
 
-- Sharing a local website or API with a colleague
-- Testing webhooks from GitHub, Stripe, Slack, etc.
-- Demoing a project without deploying to a server
-- Testing mobile apps against a local backend
+- 🔗 Sharing a local website or API with a colleague
+- 🪝 Testing webhooks from GitHub, Stripe, Slack, etc.
+- 🖥️ Demoing a project without deploying to a server
+- 📱 Testing mobile apps against a local backend
 
 ### Serveo.net
 
-[Serveo](https://serveo.net) is a free SSH tunnel service — no account or
-client installation required.  GoNC works with it out of the box:
+[Serveo](https://serveo.net) is a free SSH tunnel service — **no account or installation required**. GoNC works with it out of the box:
 
 ```bash
 # Start your local dev server (e.g., on port 3000)
-npm run dev   # or python -m http.server 3000, etc.
+npm run dev   # or python -m http.server 3000
 
 # In another terminal, create the tunnel
 gonc -p 3000 -R serveo.net --remote-port 80
@@ -188,43 +233,19 @@ GoNC will print the generated public URL:
 
 ```
 reverse tunnel established: :80 (remote) → 127.0.0.1:3000 (local)
-Forwarding HTTP traffic from https://abc123-71-60-35-103.serveousercontent.com
+Forwarding HTTP traffic from https://abc123.serveousercontent.com
 ```
 
-Open the printed URL in a browser to access your local server.
-
-**How it works:** GoNC opens an SSH connection to serveo.net, authenticates
-via keyboard-interactive (no keys or password needed), and requests a remote
-port forward.  Serveo assigns a unique subdomain and routes HTTP traffic
-from that subdomain back through the SSH tunnel to your local port.
-
-**Tips:**
-
-- No `-l` flag needed — `-R` implies listen mode automatically.
-- No `user@` prefix needed — GoNC defaults to your OS username, and
-  serveo.net ignores the username anyway.
-- The `--remote-port 80` tells serveo to expose HTTP traffic; for
-  HTTPS the URL is automatically generated.
-- Add `-v` for connection details or `-vv` for full debug output.
-- Use `--auto-reconnect` for long-running sessions that should survive
-  network blips.
-- Use `--keep-alive 15` for aggressive keepalive on unreliable connections.
-
-```bash
-# Verbose mode to see connection details
-gonc -v -p 3000 -R serveo.net --remote-port 80
-
-# Auto-reconnect for long-running tunnels
-gonc -p 3000 -R serveo.net --remote-port 80 --auto-reconnect --keep-alive 15
-
-# Expose port 8080 instead
-gonc -p 8080 -R serveo.net --remote-port 80
-```
+> **💡 Tips:**
+> - No `-l` flag needed — `-R` implies listen mode automatically
+> - No `user@` prefix needed — serveo.net ignores the username
+> - Add `-v` for details or `-vv` for full debug output
+> - Use `--auto-reconnect` for long-running sessions
+> - Use `--keep-alive 15` on unreliable connections
 
 ### localhost.run
 
-[localhost.run](https://localhost.run) is another free tunnel service that
-works over SSH.  It functions similarly to serveo.net:
+[localhost.run](https://localhost.run) is another free tunnel service that works identically:
 
 ```bash
 gonc -p 3000 -R localhost.run --remote-port 80
@@ -232,55 +253,104 @@ gonc -p 3000 -R localhost.run --remote-port 80
 
 ### Cloudflare Tunnels
 
-[Cloudflare Tunnels](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/)
-(formerly Argo Tunnel) use the `cloudflared` daemon rather than SSH, so
-they are **not directly compatible** with GoNC's `-R` flag.  However, if
-you have an SSH-accessible server with Cloudflare DNS, you can achieve a
-similar result:
+[Cloudflare Tunnels](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) use the `cloudflared` daemon (not SSH), so they are **not directly compatible** with GoNC's `-R` flag. However, you can achieve a similar result via your own VPS:
 
 ```bash
-# 1. Set up a VPS / jump server with sshd + GatewayPorts enabled
-# 2. Point a Cloudflare DNS record to the VPS (e.g., demo.example.com → VPS IP)
+# 1. Set up a VPS with sshd + GatewayPorts enabled
+# 2. Point a Cloudflare DNS record to the VPS IP
 # 3. Use GoNC to expose your local server on the VPS
 gonc -p 3000 -R user@your-vps.example.com --remote-port 8080 --auto-reconnect
-
-# Now demo.example.com:8080 routes through the VPS back to your localhost:3000.
 ```
 
-For a fully managed Cloudflare Tunnel with HTTPS and custom domains, use
-`cloudflared tunnel` — it handles certificate provisioning and DNS
-automatically, but requires installing their CLI.
+### 📊 Tunnel Service Comparison
 
-### Comparison of Tunnel Services
-
-| Service | Auth | Custom domain | HTTPS | Setup |
-|---------|------|--------------|-------|-------|
+| Service | Auth | Custom Domain | HTTPS | Command |
+|:--------|:-----|:-------------|:------|:--------|
 | **serveo.net** | None (auto) | Paid | ✅ Auto | `gonc -p 3000 -R serveo.net --remote-port 80` |
 | **localhost.run** | None (auto) | No | ✅ Auto | `gonc -p 3000 -R localhost.run --remote-port 80` |
-| **Own SSH server** | Key/password | You control | You configure | `gonc -p 3000 -R user@server --remote-port 80` |
-| **Cloudflare Tunnel** | OAuth/cert | ✅ | ✅ | Requires `cloudflared` (not SSH) |
+| **Own SSH server** | Key / password | You control | You configure | `gonc -p 3000 -R user@server --remote-port 80` |
+| **Cloudflare Tunnel** | OAuth / cert | ✅ | ✅ | Requires `cloudflared` (not SSH) |
 
-## Build
+---
+
+## ⚙️ Environment Variables
+
+GoNC supports configuration via environment variables with the `GONC_` prefix. **Precedence: CLI flags > Environment > Defaults.**
+
+| Variable | Description |
+|:---------|:------------|
+| `GONC_HOST` | Default target host |
+| `GONC_PORT` | Default target port |
+| `GONC_LISTEN` | Enable listen mode |
+| `GONC_UDP` | Enable UDP mode |
+| `GONC_VERBOSE` | Verbosity level |
+| `GONC_TUNNEL` | SSH tunnel spec (`user@host:port`) |
+| `GONC_SSH_KEY` | SSH private key path |
+| `GONC_SSH_AGENT` | Use SSH agent |
+| `GONC_STRICT_HOSTKEY` | Enable strict host key verification |
+| `GONC_REVERSE_TUNNEL` | Reverse tunnel spec |
+| `GONC_REMOTE_PORT` | Remote port for reverse tunnel |
+| `GONC_AUTO_RECONNECT` | Auto-reconnect on tunnel drop |
+| `GONC_SSH_PASSWORD_VALUE` | SSH password for non-interactive / CI use |
+
+---
+
+## 🐳 Docker
+
+GoNC ships with a multi-stage Dockerfile and full Docker Compose orchestration.
+
+### Quick Commands
+
+```bash
+# Run unit tests with race detector + coverage
+docker compose --profile test up
+
+# Cross-compile all platform binaries → ./dist/
+docker compose --profile build up
+
+# Run the full integration suite (direct TCP, port scan, SSH tunnel)
+docker compose --profile integration up --abort-on-container-exit
+
+# Run gonc in a container
+docker compose --profile run build
+docker compose run gonc -vz example.com 80
+```
+
+### Docker Stages
+
+| Stage | Purpose |
+|:------|:--------|
+| `deps` | Download and cache Go modules |
+| `test` | `go vet` + `go test -race` with coverage |
+| `builder` | Cross-compile static binaries (linux, macOS, windows) |
+| `final` | Minimal Alpine runtime image (~10 MB) |
+| `dist` | Extract all binaries from scratch image |
+
+> 📖 See [README-DOCKER.md](README-DOCKER.md) for the full Docker usage guide.
+
+---
+
+## 🔨 Build
 
 ### Prerequisites
 
-* Go 1.22+
+- **Go 1.22+**
 
-### Commands
+### Makefile Targets
 
 ```bash
-make build         # build for current OS
+make build         # build for current OS (version auto-detected from git)
 make build-all     # cross-compile all targets
-make test          # run tests with race detector
-make lint          # golangci-lint
-make clean         # remove artefacts
+make test          # go test -race -count=1 -timeout 60s ./...
+make bench         # run benchmarks
+make coverage      # generate HTML coverage report
+make check         # go vet + go test (CI gate)
+make clean         # remove build artefacts
 ```
 
-### Windows Version Info
+### Windows Version Info (Optional)
 
-The optional `resource/resource.json` can be used with
-[goversioninfo](https://github.com/josephspurrier/goversioninfo) to embed
-PE metadata (FileDescription, CompanyName, etc.) into the Windows binary.
+Embed PE metadata (FileDescription, CompanyName, etc.) into the Windows binary:
 
 ```bash
 go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest
@@ -288,60 +358,136 @@ goversioninfo -o resource.syso resource/resource.json
 go build -o gonc.exe .
 ```
 
-## Architecture
+---
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for design details.
+## 🏗️ Architecture
 
-## Project Layout
+GoNC follows a clean layered architecture with well-separated concerns:
+
+```
+┌────────────┐
+│   cmd/     │  CLI flag parsing (pflag)
+├────────────┤
+│  config/   │  Configuration, validation, env loading
+├────────────┤
+│  netcat/   │  Core logic: client, server, scanner, reverse dispatch
+├────────────┤
+│  tunnel/   │  SSH forward + reverse tunneling engine
+├────────────┤
+│  internal/ │  errors · retry (backoff + circuit breaker) · metrics
+├────────────┤
+│   util/    │  Logger, I/O helpers, network utils, buffer pool
+└────────────┘
+```
+
+> 📖 See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed design documentation.
+>
+> 🔒 See [docs/SECURITY.md](docs/SECURITY.md) for threat model and hardening guide.
+>
+> 📋 See [docs/REFACTORING.md](docs/REFACTORING.md) for the full refactoring changelog.
+
+---
+
+## 📁 Project Layout
 
 ```
 gonc/
-├── main.go                    Entry point
-├── go.mod / go.sum            Module dependencies
-├── Makefile                   Build, test, lint, clean targets
+├── main.go                         Entry point
+├── go.mod / go.sum                 Module dependencies
+├── Makefile                        Build, test, bench, coverage, check
+│
 ├── cmd/
-│   └── root.go                CLI flag parsing (pflag)
+│   ├── root.go                     CLI flag parsing & dispatch
+│   └── root_test.go                CLI integration tests
+│
 ├── config/
-│   ├── config.go              Configuration & validation
-│   └── config_test.go
+│   ├── config.go                   Config struct & validation
+│   ├── config_test.go              Validation tests
+│   ├── defaults.go                 Centralized default constants
+│   ├── loader.go                   Environment variable loader
+│   ├── loader_test.go              Loader tests
+│   └── validator_test.go           Edge-case validation tests
+│
 ├── netcat/
-│   ├── netcat.go              Run dispatcher
-│   ├── client.go              TCP/UDP client mode
-│   ├── client_test.go
-│   ├── server.go              Listen mode
-│   ├── server_test.go
-│   ├── reverse.go             Reverse tunnel dispatch (→ tunnel pkg)
-│   ├── transfer.go            Exec / command binding
-│   ├── scanner.go             Port scanning (-z)
-│   └── scanner_test.go
+│   ├── netcat.go                   Run dispatcher
+│   ├── client.go / client_test.go  TCP/UDP client mode
+│   ├── server.go / server_test.go  Listen mode
+│   ├── scanner.go / scanner_test.go Port scanning (-z)
+│   ├── reverse.go                  Reverse tunnel dispatch
+│   ├── transfer.go                 Exec / command binding
+│   └── bench_test.go               Benchmarks
+│
 ├── tunnel/
-│   ├── tunnel.go              Tunnel interface
-│   ├── ssh.go                 SSH forward tunnel + SSHConfig struct
-│   ├── auth.go                Auth methods (keys, agent, keyboard-interactive)
-│   ├── auth_test.go
-│   ├── reverse.go             Reverse SSH tunnel engine (ssh -R)
-│   ├── reverse_test.go        + custom forwarded-tcpip channel handler
-│   └── manager.go             Lifecycle / health
+│   ├── tunnel.go                   Tunnel interface
+│   ├── ssh.go                      SSH forward tunnel + config
+│   ├── auth.go / auth_test.go      Auth methods (key, agent, password, KI)
+│   ├── reverse_tunnel.go           Reverse tunnel lifecycle
+│   ├── reverse_forwarder.go        Connection bridging + metrics
+│   ├── reverse_health.go           Keepalive & reconnection
+│   ├── reverse_dial.go             SSH dial + GatewayPorts validation
+│   ├── reverse_listener.go         Custom forwarded-tcpip handler
+│   ├── reverse_test.go             Reverse tunnel tests
+│   ├── manager.go                  Lifecycle management
+│   └── bench_test.go               Benchmarks
+│
+├── internal/
+│   ├── errors/                     Domain error types (NetworkError, SSHError, ConfigError)
+│   ├── retry/                      Exponential backoff + circuit breaker
+│   └── metrics/                    Lock-free atomic counters
+│
 ├── util/
-│   ├── io.go                  Bidirectional copy
-│   ├── io_test.go
-│   ├── network.go             Address helpers
-│   ├── network_test.go
-│   └── logger.go              Levelled logging
-├── resource/
-│   └── resource.json          Windows PE version metadata
+│   ├── io.go / io_test.go          Bidirectional copy
+│   ├── network.go / network_test.go Address helpers
+│   ├── logger.go / logger_test.go  Levelled logger with timestamps
+│   ├── pool.go                     sync.Pool buffer reuse
+│   └── bench_test.go               Benchmarks
+│
+├── docs/
+│   ├── REFACTORING.md              Refactoring changelog
+│   └── SECURITY.md                 Threat model & hardening guide
+│
 ├── scripts/
-│   ├── build-all.sh           Cross-compile helper
-│   └── integration-test.sh    Docker E2E test runner
-├── Dockerfile                 Multi-stage (deps → test → builder → final → dist)
-├── docker-compose.yaml        Dev/test orchestration (build, test, integration)
-├── docker-compose.prod.yaml   Hardened production deployment
+│   ├── build-all.sh                Cross-compile helper
+│   ├── integration-test.sh         Docker E2E test runner
+│   └── enable-forwarding.sh        Test SSH forwarding config
+│
+├── resource/
+│   └── resource.json               Windows PE version metadata
+│
+├── Dockerfile                      Multi-stage (deps → test → builder → final → dist)
+├── docker-compose.yaml             Dev/test orchestration
+├── docker-compose.prod.yaml        Hardened production deployment
 ├── .dockerignore
-├── README-DOCKER.md           Docker usage guide
-├── ARCHITECTURE.md            Design documentation
-└── EXAMPLES.md                Extended usage examples
+├── ARCHITECTURE.md                 Design documentation
+├── EXAMPLES.md                     Extended usage examples
+└── README-DOCKER.md                Docker usage guide
 ```
 
-## License
+---
 
-MIT – see individual source files.
+## 🔒 Security
+
+GoNC follows a clear trust model: **the invoking user is trusted; remote peers and SSH gateways are not.**
+
+Key security features:
+
+- 🔑 **SSH host key verification** via `--strict-hostkey` (off by default for convenience)
+- 🔐 **Multiple auth methods** — key files, SSH agent, password prompt, keyboard-interactive
+- 🛡️ **No plaintext secrets** — passwords read from terminal or `GONC_SSH_PASSWORD_VALUE` env var
+- ⚠️ **Exec/command flags** (`-e` / `-c`) require explicit opt-in
+- 📦 **Static binary** — no dynamic dependencies, minimal attack surface
+- 🔒 **Build security** — `CGO_ENABLED=0`, `-trimpath`, stripped symbols
+
+> 📖 See [docs/SECURITY.md](docs/SECURITY.md) for the full threat model and hardening guide.
+
+---
+
+## 📄 License
+
+MIT — see individual source files for details.
+
+---
+
+<p align="center">
+  <b>GoNC</b> — netcat, reimagined for the tunnel age. 🌐
+</p>
