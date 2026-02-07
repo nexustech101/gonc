@@ -35,6 +35,8 @@ func (nc *NetCat) Run(ctx context.Context) error {
 	}
 
 	switch {
+	case nc.Config.ReverseTunnelEnabled:
+		return nc.handleReverseTunnel(ctx)
 	case nc.Config.Listen:
 		return nc.handleServer(ctx)
 	case nc.Config.ZeroIO:

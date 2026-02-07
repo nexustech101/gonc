@@ -128,6 +128,97 @@ gonc -w 5 slow-host.example.com 80
 gonc -vz -w 2 target 1-100
 ```
 
+## Reverse SSH Tunnel
+
+```bash
+# Expose local web server (port 3000) on gateway port 80
+gonc -p 3000 -R user@gateway.example.com --remote-port 80
+
+# Expose a database with specific bind address
+gonc -p 3306 -R admin@bastion --remote-port 3306 --remote-bind-address 10.0.1.5
+
+# With GatewayPorts validation and auto-reconnect
+gonc -p 8080 -R user@jump.example.com --remote-port 9000 \
+  --gateway-ports-check --auto-reconnect
+
+# Custom SSH key + shorter keepalive for flaky connections
+gonc -p 8080 -R deploy@bastion --remote-port 443 \
+  --ssh-key ~/.ssh/deploy_ed25519 --keep-alive 10 --auto-reconnect
+
+# Verbose mode for debugging
+gonc -vv -p 8080 -R user@gateway --remote-port 9000
+```
+
+## Exposing Localhost to the Internet
+
+These examples demonstrate how to use free public tunnel services to
+share a local development server with anyone on the internet.
+
+### Serveo.net
+
+```bash
+# 1. Start your local dev server in one terminal
+#    (any framework — React, Next.js, Flask, Rails, etc.)
+npm run dev          # starts on http://localhost:3000
+
+# 2. In another terminal, create the tunnel
+gonc -p 3000 -R serveo.net --remote-port 80
+
+# GoNC will print the generated public URL:
+#   reverse tunnel established: :80 (remote) → 127.0.0.1:3000 (local)
+#   Forwarding HTTP traffic from https://abc123-71-60-35-103.serveousercontent.com
+
+# 3. Open the URL in your browser or share it with others.
+```
+
+```bash
+# Expose a different local port
+gonc -p 8080 -R serveo.net --remote-port 80
+
+# Verbose output to see connection details
+gonc -v -p 3000 -R serveo.net --remote-port 80
+
+# Auto-reconnect for long-running sessions
+gonc -p 3000 -R serveo.net --remote-port 80 --auto-reconnect
+
+# Aggressive keepalive for unreliable networks
+gonc -p 3000 -R serveo.net --remote-port 80 --auto-reconnect --keep-alive 15
+```
+
+### localhost.run
+
+```bash
+# Same pattern — works with any SSH tunnel service
+gonc -p 3000 -R localhost.run --remote-port 80
+```
+
+### Your Own SSH Server
+
+```bash
+# Expose localhost:3000 on your VPS port 8080
+# (requires GatewayPorts yes in sshd_config for external access)
+gonc -p 3000 -R user@your-vps.example.com --remote-port 8080
+
+# With auto-reconnect for production-like stability
+gonc -p 3000 -R user@your-vps.example.com --remote-port 8080 \
+  --auto-reconnect --keep-alive 15
+```
+
+### Typical Development Workflow
+
+```bash
+# Terminal 1: Start your local dev server
+cd my-project && npm run dev
+
+# Terminal 2: Expose it to the internet for webhook testing
+gonc -p 3000 -R serveo.net --remote-port 80
+
+# Terminal 3: Configure your webhook provider (GitHub, Stripe, etc.)
+# to point at the printed serveousercontent.com URL.
+
+# When done, Ctrl+C the gonc process to close the tunnel.
+```
+
 ## Combining Flags
 
 ```bash

@@ -49,6 +49,14 @@ func Execute(ctx context.Context, args []string) error {
 	fs.StringVar(&cfg.KnownHostsPath, "known-hosts", "", "Custom known_hosts path")
 	fs.IntVar(&cfg.TunnelLocalPort, "tunnel-local-port", 0, "Local tunnel port (auto if 0)")
 
+	// ── Reverse SSH tunnel ──────────────────────────────────────
+	fs.StringVarP(&cfg.ReverseTunnelSpec, "reverse-tunnel", "R", "", "Reverse SSH tunnel via [user@]host[:port]")
+	fs.IntVar(&cfg.RemotePort, "remote-port", 0, "Port to bind on remote gateway (for -R)")
+	fs.StringVar(&cfg.RemoteBindAddress, "remote-bind-address", "", "Remote bind address (for -R)")
+	fs.BoolVar(&cfg.CheckGatewayPorts, "gateway-ports-check", false, "Verify GatewayPorts before tunneling")
+	fs.IntVar(&cfg.KeepAliveInterval, "keep-alive", 30, "SSH keepalive interval in seconds (0 to disable)")
+	fs.BoolVar(&cfg.AutoReconnect, "auto-reconnect", false, "Auto-reconnect on tunnel drop")
+
 	// ── output ───────────────────────────────────────────────────
 	fs.CountVarP(&cfg.Verbose, "verbose", "v", "Increase verbosity (repeatable)")
 
@@ -76,6 +84,33 @@ func Execute(ctx context.Context, args []string) error {
 		cfg.Timeout = time.Duration(timeoutSec) * time.Second
 	}
 
+	// ── reverse tunnel spec (before positional parsing so that ────
+	// ── -R can imply listen mode and skip hostname requirement) ───
+	if cfg.ReverseTunnelSpec != "" {
+		user, host, port, err := config.ParseTunnelSpec(cfg.ReverseTunnelSpec)
+		if err != nil {
+			return fmt.Errorf("reverse tunnel: %w", err)
+		}
+		cfg.ReverseTunnelEnabled = true
+		cfg.ReverseTunnelUser = user
+		cfg.ReverseTunnelHost = host
+		cfg.ReverseTunnelPort = port
+
+		// Default to OS username when no user@ prefix is given,
+		// matching the behaviour of the ssh command.
+		if cfg.ReverseTunnelUser == "" {
+			cfg.ReverseTunnelUser = tunnel.DefaultUsername()
+		}
+
+		// -R implies listen mode so the user doesn't need to pass -l.
+		cfg.Listen = true
+
+		// Default local port to remote port when not explicitly set.
+		if cfg.LocalPort == 0 && cfg.RemotePort > 0 {
+			cfg.LocalPort = cfg.RemotePort
+		}
+	}
+
 	// ── positional arguments ─────────────────────────────────────
 	if err := parsePositional(cfg, fs.Args()); err != nil {
 		return err
@@ -91,6 +126,10 @@ func Execute(ctx context.Context, args []string) error {
 		cfg.TunnelUser = user
 		cfg.TunnelHost = host
 		cfg.TunnelPort = port
+
+		if cfg.TunnelUser == "" {
+			cfg.TunnelUser = tunnel.DefaultUsername()
+		}
 	}
 
 	// ── validate ─────────────────────────────────────────────────
@@ -164,7 +203,7 @@ func parsePositional(cfg *config.Config, remaining []string) error {
 }
 
 func printUsage(fs *flag.FlagSet) {
-	fmt.Fprintf(os.Stderr, `GoNC – Network Connectivity Tool v%s
+	fmt.Fprintf(os.Stderr, `GoNC - Network Connectivity Tool v%s
 
 A cross-platform netcat implementation with SSH tunneling.
 
@@ -172,7 +211,8 @@ Usage:
   gonc [options] <host> <port> [ports...]     Connect
   gonc -l -p <port> [options]                 Listen
   gonc -z [options] <host> <ports...>         Scan
-  gonc -T user@gateway <host> <port>          Tunnel
+  gonc -T user@gateway <host> <port>          SSH tunnel (forward)
+  gonc -p <port> -R user@gw --remote-port <port>     Reverse tunnel
 
 Options:
 `, version)
@@ -184,5 +224,11 @@ Examples:
   gonc -vz host.example.com 20-25 80 443      Port scan
   gonc -T admin@bastion db-internal 5432      SSH tunnel
   echo "hello" | gonc host.example.com 9000   Pipe data
+
+  # Reverse tunnel - expose local port 8080 on gateway port 9000
+  gonc -p 8080 -R user@gateway --remote-port 9000
+
+  # Expose local port 3000 via serveo.net (like ssh -R 80:localhost:3000 serveo.net)
+  gonc -p 3000 -R serveo.net --remote-port 80
 `)
 }

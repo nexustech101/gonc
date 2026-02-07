@@ -36,6 +36,18 @@ type Config struct {
 	KnownHostsPath  string
 	TunnelLocalPort int
 
+	// ── Reverse SSH tunnel ────────────────────────────────────────────
+	ReverseTunnelSpec    string // raw user@host[:port] from -R
+	ReverseTunnelEnabled bool
+	ReverseTunnelUser    string
+	ReverseTunnelHost    string
+	ReverseTunnelPort    int    // SSH port on gateway
+	RemotePort           int    // port to bind on remote gateway
+	RemoteBindAddress    string // 0.0.0.0 or specific IP
+	CheckGatewayPorts    bool
+	KeepAliveInterval    int // seconds (0 = disable)
+	AutoReconnect        bool
+
 	// ── Execution ────────────────────────────────────────────────────
 	Execute string // -e: program path
 	Command string // -c: shell command
@@ -138,14 +150,36 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("listen mode and zero-I/O mode are mutually exclusive")
 		}
 		if c.TunnelEnabled {
-			return fmt.Errorf("listen mode through an SSH tunnel is not yet supported")
+			return fmt.Errorf("listen mode through a forward SSH tunnel (-T) is not supported")
 		}
 	} else {
-		if c.Host == "" {
+		if c.Host == "" && !c.ReverseTunnelEnabled {
 			return fmt.Errorf("hostname is required (use --help for usage)")
 		}
-		if c.Port == 0 && len(c.Ports) == 0 {
+		if c.Port == 0 && len(c.Ports) == 0 && !c.ReverseTunnelEnabled {
 			return fmt.Errorf("destination port is required")
+		}
+	}
+
+	// ── reverse tunnel validation ───────────────────────────────
+	if c.ReverseTunnelEnabled {
+		if !c.Listen {
+			return fmt.Errorf("reverse tunnel (-R) requires listen mode (-l)")
+		}
+		if c.RemotePort == 0 {
+			return fmt.Errorf("--remote-port is required with -R")
+		}
+		if c.RemotePort < 1 || c.RemotePort > 65535 {
+			return fmt.Errorf("remote port %d out of range 1-65535", c.RemotePort)
+		}
+		if c.ReverseTunnelHost == "" {
+			return fmt.Errorf("reverse tunnel host is required")
+		}
+		if c.TunnelEnabled {
+			return fmt.Errorf("-T and -R are mutually exclusive")
+		}
+		if c.UDP {
+			return fmt.Errorf("reverse tunnel does not support UDP")
 		}
 	}
 

@@ -2,15 +2,39 @@ package tunnel
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"os"
+	"os/user"
 	"path/filepath"
+	"runtime"
+	"strings"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 	"golang.org/x/crypto/ssh/knownhosts"
 	"golang.org/x/term"
 )
+
+// DefaultUsername returns the current OS username, matching the
+// default behaviour of the ssh command when no user@ prefix is given.
+func DefaultUsername() string {
+	if u, err := user.Current(); err == nil {
+		name := u.Username
+		// Windows returns DOMAIN\user; strip the domain prefix.
+		if i := strings.LastIndex(name, `\`); i >= 0 {
+			name = name[i+1:]
+		}
+		if name != "" {
+			return name
+		}
+	}
+	// Fallback: environment variables.
+	if name := os.Getenv("USER"); name != "" {
+		return name
+	}
+	return os.Getenv("USERNAME")
+}
 
 // BuildAuthMethods assembles an ordered list of SSH authentication
 // methods from the tunnel configuration.
@@ -49,11 +73,22 @@ func BuildAuthMethods(cfg *SSHConfig) ([]ssh.AuthMethod, error) {
 		methods = defaultAuthMethods()
 	}
 
+	// 5. Keyboard-interactive – always appended as the last method
+	// when AllowKeyboardInteractive is set.  Public tunnel services
+	// like serveo.net and localhost.run advertise both "publickey" and
+	// "keyboard-interactive", but actually authenticate via the latter
+	// with zero-length challenge responses.  This mirrors what the
+	// OpenSSH client does as a fallback.
+	if cfg.AllowKeyboardInteractive {
+		methods = append(methods, keyboardInteractiveAuth())
+	}
+
 	if len(methods) == 0 {
 		return nil, fmt.Errorf(
-			"no SSH authentication methods available – " +
+			"no SSH authentication methods available \u2013 " +
 				"use --ssh-key, --ssh-password, or --ssh-agent")
 	}
+
 	return methods, nil
 }
 
@@ -86,16 +121,45 @@ func publicKeyAuth(keyPath string) (ssh.AuthMethod, error) {
 	return ssh.PublicKeys(signer), nil
 }
 
+// keyboardInteractiveAuth returns an SSH keyboard-interactive auth
+// method that answers every challenge with empty strings.  Services
+// like serveo.net use this to authenticate without real credentials.
+func keyboardInteractiveAuth() ssh.AuthMethod {
+	return ssh.KeyboardInteractive(
+		func(user, instruction string, questions []string, echos []bool) ([]string, error) {
+			// Return an empty answer for each question (if any).
+			return make([]string, len(questions)), nil
+		},
+	)
+}
+
 func agentAuth() (ssh.AuthMethod, error) {
-	sock := os.Getenv("SSH_AUTH_SOCK")
-	if sock == "" {
-		return nil, fmt.Errorf("SSH_AUTH_SOCK is not set")
-	}
-	conn, err := net.Dial("unix", sock)
+	rw, err := agentConn()
 	if err != nil {
-		return nil, fmt.Errorf("connecting to agent at %s: %w", sock, err)
+		return nil, err
 	}
-	return ssh.PublicKeysCallback(agent.NewClient(conn).Signers), nil
+	return ssh.PublicKeysCallback(agent.NewClient(rw).Signers), nil
+}
+
+// agentConn opens a connection to the running SSH agent.  On Unix it
+// uses SSH_AUTH_SOCK; on Windows it tries the OpenSSH named pipe.
+func agentConn() (io.ReadWriteCloser, error) {
+	// Unix / WSL / Git Bash: standard socket path.
+	if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
+		return net.Dial("unix", sock)
+	}
+
+	// Windows: OpenSSH agent communicates via a named pipe.
+	if runtime.GOOS == "windows" {
+		pipe := `\\.\pipe\openssh-ssh-agent`
+		f, err := os.OpenFile(pipe, os.O_RDWR, 0)
+		if err != nil {
+			return nil, fmt.Errorf("connecting to Windows SSH agent at %s: %w", pipe, err)
+		}
+		return f, nil
+	}
+
+	return nil, fmt.Errorf("SSH agent not available (SSH_AUTH_SOCK not set)")
 }
 
 func passwordAuth() (ssh.AuthMethod, error) {

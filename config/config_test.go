@@ -137,6 +137,42 @@ func TestValidate(t *testing.T) {
 			cfg:     Config{Listen: true, LocalPort: 80, ZeroIO: true},
 			wantErr: true,
 		},
+		// ── reverse tunnel ─────────────────────────────────────
+		{
+			name:    "valid reverse tunnel",
+			cfg:     Config{Listen: true, LocalPort: 8080, ReverseTunnelEnabled: true, ReverseTunnelHost: "gw", ReverseTunnelUser: "u", RemotePort: 9000},
+			wantErr: false,
+		},
+		{
+			name:    "reverse tunnel no listen",
+			cfg:     Config{LocalPort: 8080, Host: "x", Port: 80, ReverseTunnelEnabled: true, ReverseTunnelHost: "gw", RemotePort: 9000},
+			wantErr: true,
+		},
+		{
+			name:    "reverse tunnel no remote port",
+			cfg:     Config{Listen: true, LocalPort: 8080, ReverseTunnelEnabled: true, ReverseTunnelHost: "gw"},
+			wantErr: true,
+		},
+		{
+			name:    "reverse tunnel invalid remote port",
+			cfg:     Config{Listen: true, LocalPort: 8080, ReverseTunnelEnabled: true, ReverseTunnelHost: "gw", RemotePort: 70000},
+			wantErr: true,
+		},
+		{
+			name:    "reverse tunnel + forward tunnel conflict",
+			cfg:     Config{Listen: true, LocalPort: 8080, ReverseTunnelEnabled: true, ReverseTunnelHost: "gw", RemotePort: 9000, TunnelEnabled: true, TunnelHost: "gw2"},
+			wantErr: true,
+		},
+		{
+			name:    "reverse tunnel + UDP",
+			cfg:     Config{Listen: true, LocalPort: 8080, ReverseTunnelEnabled: true, ReverseTunnelHost: "gw", RemotePort: 9000, UDP: true},
+			wantErr: true,
+		},
+		{
+			name:    "reverse tunnel no host",
+			cfg:     Config{Listen: true, LocalPort: 8080, ReverseTunnelEnabled: true, RemotePort: 9000},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {

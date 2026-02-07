@@ -23,6 +23,12 @@ type SSHConfig struct {
 	StrictHostKey bool
 	KnownHosts    string
 	ConnTimeout   time.Duration
+
+	// AllowKeyboardInteractive enables adding keyboard-interactive as
+	// a fallback auth method.  Public tunnel services (serveo.net,
+	// localhost.run) authenticate via keyboard-interactive with empty
+	// challenge responses.
+	AllowKeyboardInteractive bool
 }
 
 // SSHTunnel implements [Tunnel] by opening an SSH connection and
