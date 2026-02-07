@@ -10,7 +10,7 @@ import (
 	flag "github.com/spf13/pflag"
 
 	"gonc/config"
-	"gonc/netcat"
+	"gonc/internal/core"
 	"gonc/tunnel"
 	"gonc/util"
 )
@@ -146,25 +146,14 @@ func Execute(ctx context.Context, args []string) error {
 		return nil
 	}
 
-	// ── build components ─────────────────────────────────────────
+	// ── build and run ────────────────────────────────────────────
 	logger := util.NewLogger(cfg.Verbose)
 
-	var tun tunnel.Tunnel
-	if cfg.TunnelEnabled {
-		tun = tunnel.NewSSHTunnel(&tunnel.SSHConfig{
-			User:          cfg.TunnelUser,
-			Host:          cfg.TunnelHost,
-			Port:          cfg.TunnelPort,
-			KeyPath:       cfg.SSHKeyPath,
-			PromptPass:    cfg.SSHPassword,
-			UseAgent:      cfg.UseSSHAgent,
-			StrictHostKey: cfg.StrictHostKey,
-			KnownHosts:    cfg.KnownHostsPath,
-		}, logger)
+	mode, err := core.Build(cfg, logger)
+	if err != nil {
+		return err
 	}
-
-	nc := netcat.New(cfg, tun, logger)
-	return nc.Run(ctx)
+	return mode.Run(ctx)
 }
 
 // ── helpers ──────────────────────────────────────────────────────────

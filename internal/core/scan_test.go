@@ -1,4 +1,4 @@
-package netcat
+package core
 
 import (
 	"context"
@@ -51,7 +51,6 @@ func TestScanPorts(t *testing.T) {
 
 // TestScanPortsTimeout verifies scans respect the timeout.
 func TestScanPortsTimeout(t *testing.T) {
-	// Use a non-routable IP so the connection hangs until timeout.
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
