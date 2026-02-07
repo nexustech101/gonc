@@ -9,6 +9,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
+	ncerr "gonc/internal/errors"
 	"gonc/util"
 )
 
@@ -56,12 +57,12 @@ func NewSSHTunnel(cfg *SSHConfig, logger *util.Logger) *SSHTunnel {
 func (t *SSHTunnel) Connect(ctx context.Context) error {
 	authMethods, err := BuildAuthMethods(t.config)
 	if err != nil {
-		return fmt.Errorf("auth: %w", err)
+		return ncerr.WrapSSH("auth", t.config.Host, t.config.Port, err)
 	}
 
 	hkCallback, err := hostKeyCallback(t.config)
 	if err != nil {
-		return fmt.Errorf("host-key callback: %w", err)
+		return ncerr.WrapSSH("hostkey", t.config.Host, t.config.Port, err)
 	}
 
 	sshCfg := &ssh.ClientConfig{
@@ -78,13 +79,13 @@ func (t *SSHTunnel) Connect(ctx context.Context) error {
 	var dialer net.Dialer
 	tcpConn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
-		return fmt.Errorf("TCP dial %s: %w", addr, err)
+		return ncerr.Wrap("dial", addr, err)
 	}
 
 	sshConn, chans, reqs, err := ssh.NewClientConn(tcpConn, addr, sshCfg)
 	if err != nil {
 		tcpConn.Close()
-		return fmt.Errorf("SSH handshake with %s: %w", addr, err)
+		return ncerr.WrapSSH("handshake", t.config.Host, t.config.Port, err)
 	}
 
 	client := ssh.NewClient(sshConn, chans, reqs)
@@ -107,7 +108,7 @@ func (t *SSHTunnel) Dial(ctx context.Context, network, address string) (net.Conn
 	t.mu.RUnlock()
 
 	if !alive || client == nil {
-		return nil, fmt.Errorf("SSH tunnel is not connected")
+		return nil, ncerr.ErrNotConnected
 	}
 
 	t.logger.Debug("tunnel: dialing %s %s", network, address)

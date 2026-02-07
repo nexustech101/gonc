@@ -7,12 +7,13 @@ import (
 	"sync"
 	"time"
 
+	"gonc/config"
 	"gonc/util"
 )
 
 const (
-	defaultScanTimeout = 3 * time.Second
-	maxConcurrentScans = 100
+	defaultScanTimeout = config.DefaultScanTimeout
+	maxConcurrentScans = config.DefaultMaxConcurrentScans
 )
 
 // DialFunc establishes a network connection.

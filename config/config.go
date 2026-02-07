@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	ncerr "gonc/internal/errors"
 )
 
 // Config holds every tuneable for a single gonc session.
@@ -55,11 +57,14 @@ type Config struct {
 	// ── Output ───────────────────────────────────────────────────────
 	Verbose int
 	ZeroIO  bool
+
+	// ── Diagnostics ──────────────────────────────────────────────────
+	DryRun bool // validate config and exit without executing
 }
 
 // ── Port helpers ─────────────────────────────────────────────────────
 
-// PortRange is an inclusive start–end pair.
+// PortRange is an inclusive start-end pair.
 type PortRange struct {
 	Start int
 	End   int
@@ -121,7 +126,7 @@ var tunnelRe = regexp.MustCompile(`^(?:([^@]+)@)?([^:]+)(?::(\d+))?$`)
 func ParseTunnelSpec(spec string) (user, host string, port int, err error) {
 	m := tunnelRe.FindStringSubmatch(spec)
 	if m == nil {
-		return "", "", 0, fmt.Errorf("invalid tunnel spec %q – expected [user@]host[:port]", spec)
+		return "", "", 0, fmt.Errorf("invalid tunnel spec %q - expected [user@]host[:port]", spec)
 	}
 	user = m[1]
 	host = m[2]
@@ -141,58 +146,113 @@ func ParseTunnelSpec(spec string) (user, host string, port int, err error) {
 // ── Validation ───────────────────────────────────────────────────────
 
 // Validate checks that the configuration is internally consistent.
+// Errors returned are [ncerr.ConfigError] when the field is known.
 func (c *Config) Validate() error {
 	if c.Listen {
 		if c.LocalPort == 0 {
-			return fmt.Errorf("listen mode requires -p <port>")
+			return &ncerr.ConfigError{
+				Field:   "port",
+				Message: "required in listen mode",
+				Hint:    "specify a port with -p <port>, e.g.: gonc -l -p 8080",
+			}
 		}
 		if c.ZeroIO {
-			return fmt.Errorf("listen mode and zero-I/O mode are mutually exclusive")
+			return &ncerr.ConfigError{
+				Field:   "zero-io",
+				Message: "listen mode and zero-I/O mode are mutually exclusive",
+				Hint:    "use -z without -l for port scanning",
+			}
 		}
 		if c.TunnelEnabled {
-			return fmt.Errorf("listen mode through a forward SSH tunnel (-T) is not supported")
+			return &ncerr.ConfigError{
+				Field:   "tunnel",
+				Message: "listen mode through a forward SSH tunnel (-T) is not supported",
+				Hint:    "use -R for reverse tunnels instead",
+			}
 		}
 	} else {
 		if c.Host == "" && !c.ReverseTunnelEnabled {
-			return fmt.Errorf("hostname is required (use --help for usage)")
+			return &ncerr.ConfigError{
+				Field:   "host",
+				Message: "hostname is required",
+				Hint:    "usage: gonc [options] <host> <port>",
+			}
 		}
 		if c.Port == 0 && len(c.Ports) == 0 && !c.ReverseTunnelEnabled {
-			return fmt.Errorf("destination port is required")
+			return &ncerr.ConfigError{
+				Field:   "port",
+				Message: "destination port is required",
+				Hint:    "usage: gonc <host> <port>, e.g.: gonc example.com 80",
+			}
 		}
 	}
 
 	// ── reverse tunnel validation ───────────────────────────────
 	if c.ReverseTunnelEnabled {
 		if !c.Listen {
-			return fmt.Errorf("reverse tunnel (-R) requires listen mode (-l)")
+			return &ncerr.ConfigError{
+				Field:   "reverse-tunnel",
+				Message: "reverse tunnel requires listen mode",
+				Hint:    "-R implies -l automatically; this is an internal error",
+			}
 		}
 		if c.RemotePort == 0 {
-			return fmt.Errorf("--remote-port is required with -R")
+			return &ncerr.ConfigError{
+				Field:   "remote-port",
+				Message: "required with -R",
+				Hint:    "e.g.: gonc -p 3000 -R serveo.net --remote-port 80",
+			}
 		}
 		if c.RemotePort < 1 || c.RemotePort > 65535 {
-			return fmt.Errorf("remote port %d out of range 1-65535", c.RemotePort)
+			return &ncerr.ConfigError{
+				Field:   "remote-port",
+				Value:   c.RemotePort,
+				Message: "out of range 1-65535",
+			}
 		}
 		if c.ReverseTunnelHost == "" {
-			return fmt.Errorf("reverse tunnel host is required")
+			return &ncerr.ConfigError{
+				Field:   "reverse-tunnel",
+				Message: "tunnel host is required",
+				Hint:    "e.g.: gonc -R user@gateway --remote-port 9000 -p 8080",
+			}
 		}
 		if c.TunnelEnabled {
-			return fmt.Errorf("-T and -R are mutually exclusive")
+			return &ncerr.ConfigError{
+				Field:   "tunnel",
+				Message: "-T and -R are mutually exclusive",
+				Hint:    "use either forward tunnel (-T) or reverse tunnel (-R)",
+			}
 		}
 		if c.UDP {
-			return fmt.Errorf("reverse tunnel does not support UDP")
+			return &ncerr.ConfigError{
+				Field:   "udp",
+				Message: "reverse tunnel does not support UDP",
+			}
 		}
 	}
 
 	if c.Execute != "" && c.Command != "" {
-		return fmt.Errorf("-e and -c are mutually exclusive")
+		return &ncerr.ConfigError{
+			Field:   "exec",
+			Message: "-e and -c are mutually exclusive",
+			Hint:    "use -e for a program or -c for a shell command, not both",
+		}
 	}
 
 	if c.UDP && c.TunnelEnabled {
-		return fmt.Errorf("UDP is not supported through SSH tunnels")
+		return &ncerr.ConfigError{
+			Field:   "udp",
+			Message: "UDP is not supported through SSH tunnels",
+		}
 	}
 
 	if c.TunnelEnabled && c.TunnelHost == "" {
-		return fmt.Errorf("tunnel host is required")
+		return &ncerr.ConfigError{
+			Field:   "tunnel",
+			Message: "tunnel host is required",
+			Hint:    "e.g.: gonc -T user@gateway host port",
+		}
 	}
 
 	return nil

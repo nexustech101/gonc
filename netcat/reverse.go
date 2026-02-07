@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"gonc/internal/metrics"
 	"gonc/tunnel"
 )
 
@@ -46,7 +47,7 @@ func (nc *NetCat) handleReverseTunnel(ctx context.Context) error {
 		sshCfg.User, sshCfg.Host, sshCfg.Port,
 		rtCfg.RemotePort, rtCfg.LocalPort)
 
-	rt := tunnel.NewReverseTunnel(rtCfg, nc.Logger)
+	rt := tunnel.NewReverseTunnel(rtCfg, nc.Logger, metrics.New())
 
 	if err := rt.Start(ctx); err != nil {
 		return fmt.Errorf("reverse tunnel: %w", err)
